@@ -1,0 +1,29 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Run: app",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${command:cmake.buildDirectory}/app",
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "Run: dev_main",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${command:cmake.buildDirectory}/dev_main",
+            "args": [],
+            "cwd": "${command:cmake.buildDirectory}/temp"
+        },
+        {
+            "name": "Run: test_environment",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${command:cmake.buildDirectory}/test_environment",
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

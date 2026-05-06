@@ -1,0 +1,11 @@
+{
+  "cmake.debugConfig": {
+    "type": "lldb",
+    "request": "launch"
+  },
+  "cmake.ctest.neverDebugTestsWithLaunchConfiguration": true,
+  "testMate.cpp.test.executables": "{build,out}/test_environment",
+  "clangd.arguments": [
+    "--compile-commands-dir=${workspaceFolder}/build"
+  ]
+}

@@ -1,0 +1,86 @@
+# Prerequisites
+*.d
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Linker files
+*.ilk
+
+# Debugger Files
+*.pdb
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# debug information files
+*.dwo
+
+# build dirs
+cmake-build-*/
+build/
+out/
+
+# CMake generated
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+Testing/
+
+# CLion/JetBrains
+.idea/
+**/.idea/
+
+# macOS
+.DS_Store
+
+#Others
+CHECKLIST_NOTES.md
+
+#smoke ut
+unit_tests/test_smoke.cpp
+
+# --- Project-specific ---
+# Secrets / local config
+.env
+.env.local
+*.secret
+
+# Collected market data (can be huge, regenerate from XTB on demand).
+# Narrow rule: only files INSIDE cache/ are ignored. This way small parquet
+# fixtures in unit_tests/fixtures/ stay trackable for parser/writer tests.
+cache/
+
+# Logs
+logs/
+*.log
+
+# Python venv used for ad-hoc parquet inspection
+.venv/
+__pycache__/
+
