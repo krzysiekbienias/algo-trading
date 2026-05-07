@@ -22,5 +22,11 @@ target_link_libraries(test_environment
         GTest::gtest_main
 )
 
+# Expose the fixtures directory as a compile-time constant so tests can locate
+# fixture files regardless of the working directory they are launched from.
+target_compile_definitions(test_environment PRIVATE
+        TEST_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures"
+)
+
 include(GoogleTest)
 gtest_discover_tests(test_environment)
