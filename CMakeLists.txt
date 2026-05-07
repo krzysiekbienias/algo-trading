@@ -58,6 +58,7 @@ add_library(core_lib STATIC
     src/core_lib.cpp
     src/util/env.cpp
     src/util/log.cpp
+    src/util/time.cpp
     src/xtb/client.cpp
     src/xtb/api.cpp
     src/storage/parquet_writer.cpp

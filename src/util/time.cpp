@@ -3,8 +3,9 @@
 #include <fmt/chrono.h>
 
 #include <chrono>
+#include <cstdio>
+#include <ctime>
 #include <optional>
-#include <sstream>
 #include <string>
 #include <string_view>
 
@@ -18,44 +19,64 @@ std::string formatIso8601(Timestamp tp) {
 }
 
 std::optional<Timestamp> parseIso8601(std::string_view s) {
-    using namespace std::chrono;
-
     if (s.empty()) return std::nullopt;
 
-    // Strip an optional 'Z' UTC marker (uppercase only — RFC-3339 strict).
-    // We ALWAYS interpret times as UTC; the marker is optional purely for
-    // input ergonomics.
     std::string buf(s);
-    if (buf.back() == 'Z') {
-        buf.pop_back();
-    }
-    // Defensive: input might have been just "Z", leaving an empty buf.
+
+    // Strip optional trailing 'Z' UTC marker (RFC-3339).
+    if (buf.back() == 'Z') buf.pop_back();
     if (buf.empty()) return std::nullopt;
 
-    // chrono::parse needs a full datetime to fill a sys_time<ms>. For
-    // date-only input ("2026-05-06") we synthesize the missing time portion
-    // up-front rather than juggling sys_days as a fallback target.
+    int year = 0, month = 0, day = 0, hour = 0, minute = 0, sec = 0, ms = 0;
+
     if (buf.size() == 10 && buf[4] == '-' && buf[7] == '-') {
-        buf += "T00:00:00";
-    }
+        // Date-only: "2026-05-06"
+        if (std::sscanf(buf.c_str(), "%d-%d-%d", &year, &month, &day) != 3)
+            return std::nullopt;
+    } else if (buf.size() >= 19) {
+        // Full datetime with 'T' or space separator.
+        char sep = buf[10];
+        if (sep != 'T' && sep != ' ') return std::nullopt;
 
-    // Try the supported separators in priority order. chrono::parse handles
-    // optional sub-second milliseconds inside %T natively (so ".123" works
-    // out of the box).
-    static constexpr const char* kFormats[] = {
-        "%FT%T",
-        "%F %T",
-    };
+        // Replace separator with a space so sscanf can use a single format.
+        buf[10] = ' ';
 
-    for (const char* fmt : kFormats) {
-        Timestamp tp;
-        std::istringstream is(buf);
-        is >> parse(fmt, tp);
-        if (!is.fail() && (is.eof() || is.peek() == std::char_traits<char>::eof())) {
-            return tp;
+        int parsed = std::sscanf(buf.c_str(), "%d-%d-%d %d:%d:%d",
+                                 &year, &month, &day, &hour, &minute, &sec);
+        if (parsed != 6) return std::nullopt;
+
+        // Optional sub-second part: ".123"
+        if (buf.size() > 19 && buf[19] == '.') {
+            std::string ms_str = buf.substr(20, 3);
+            while (ms_str.size() < 3) ms_str += '0';
+            ms = std::stoi(ms_str);
         }
+    } else {
+        return std::nullopt;
     }
-    return std::nullopt;
+
+    // Basic range validation before feeding to timegm.
+    if (month < 1 || month > 12 || day < 1 || day > 31 ||
+        hour < 0 || hour > 23 || minute < 0 || minute > 59 ||
+        sec < 0 || sec > 60 || ms < 0 || ms > 999) {
+        return std::nullopt;
+    }
+
+    struct tm t{};
+    t.tm_year  = year - 1900;
+    t.tm_mon   = month - 1;
+    t.tm_mday  = day;
+    t.tm_hour  = hour;
+    t.tm_min   = minute;
+    t.tm_sec   = sec;
+    t.tm_isdst = 0;
+
+    // timegm interprets tm as UTC (unlike mktime which uses local zone).
+    const time_t epoch_sec = timegm(&t);
+    if (epoch_sec == static_cast<time_t>(-1)) return std::nullopt;
+
+    return Timestamp{
+        std::chrono::milliseconds{static_cast<std::int64_t>(epoch_sec) * 1000 + ms}};
 }
 
 }  // namespace at::time
