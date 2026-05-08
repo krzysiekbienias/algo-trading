@@ -62,6 +62,7 @@ add_library(core_lib STATIC
     src/xtb/client.cpp
     src/xtb/api.cpp
     src/storage/parquet_writer.cpp
+    src/backfill/engine.cpp
 )
 
 target_include_directories(core_lib PUBLIC
