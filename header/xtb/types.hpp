@@ -18,7 +18,7 @@ struct Credentials {
 
 // Connection-level settings.
 struct ClientConfig {
-    std::string endpoint = "wss://ws.xtb.com/demo";
+    std::string endpoint = "wss://ws.xapi.pro/demo";
     // Minimum delay between outgoing requests. XTB recommends >= 200 ms;
     // we default to 250 ms for safety margin.
     std::chrono::milliseconds throttle = std::chrono::milliseconds(250);
