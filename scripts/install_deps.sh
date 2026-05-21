@@ -10,6 +10,8 @@ fi
 
 PACKAGES=(
     cmake               # build system (>=3.20 required)
+    ninja               # fast build backend for scripts/build.sh
+    llvm                # clang-format (scripts/format.sh)
     pkg-config          # transitive use by Arrow et al.
     openssl@3           # TLS backend for IXWebSocket
     nlohmann-json       # JSON parser (header-only)

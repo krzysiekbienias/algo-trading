@@ -27,8 +27,9 @@ macOS with Homebrew. (Linux support trivial — replace `brew` with `apt`/`dnf`.
 bash scripts/install_deps.sh
 ```
 
-This installs (via Homebrew): `cmake`, `pkg-config`, `openssl@3`,
-`nlohmann-json`, `apache-arrow`, `spdlog`, `fmt`, `googletest`.
+This installs (via Homebrew): `cmake`, `ninja`, `llvm` (clang-format),
+`pkg-config`, `openssl@3`, `nlohmann-json`, `apache-arrow`, `spdlog`, `fmt`,
+`googletest`.
 
 IXWebSocket is fetched and built automatically by CMake at configure time.
 
@@ -51,8 +52,25 @@ first.
 ## Build
 
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+scripts/build.sh              # Debug (default)
+scripts/build.sh Release      # optimized (Arrow fast paths)
+RUN_TESTS=1 scripts/build.sh  # build + run unit tests
+```
+
+Manual CMake (equivalent):
+
+```bash
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
 cmake --build build -j
+```
+
+Other helpers:
+
+```bash
+scripts/clean.sh              # remove build/
+scripts/clean.sh --deep       # also remove data/ and cache/
+scripts/format.sh             # clang-format all sources
+scripts/format.sh --check     # CI-style format check
 ```
 
 Binaries:
