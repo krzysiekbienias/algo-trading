@@ -72,9 +72,10 @@ unit_tests/test_smoke.cpp
 *.secret
 
 # Collected market data (can be huge, regenerate from XTB on demand).
-# Narrow rule: only files INSIDE cache/ are ignored. This way small parquet
-# fixtures in unit_tests/fixtures/ stay trackable for parser/writer tests.
+# Narrow rule: only files INSIDE these dirs are ignored. Small parquet
+# fixtures in unit_tests/fixtures/ stay trackable for tests.
 cache/
+data/
 
 # Logs
 logs/

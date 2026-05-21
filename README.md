@@ -1,18 +1,18 @@
 # algo-trading
 
-C++20 data pipeline that pulls historical and (later) live market data from
-[XTB xStation 5 API](http://developers.xstore.pro/documentation/) over a
-WebSocket connection and persists it to columnar Parquet files for
-downstream backtesting / research.
+C++20 data pipeline that pulls historical market data from the
+[XTB xStation 5 API](https://xopenhub.pro/api/xapi-protocol-documentation)
+over WebSocket and persists OHLCV bars to columnar Parquet files for
+downstream backtesting and research (DuckDB, Polars, pandas).
 
-> **Phase 1 (current):** historical M1 backfill via `getChartRangeRequest` →
-> one Parquet file per symbol. Live tick/candle streaming will land in Phase 2.
+> **Phase 1 (current):** historical backfill via `getChartRangeRequest` →
+> one Parquet file per symbol/timeframe. Live tick streaming lands in Phase 2.
 
 ## Stack
 
 | Concern        | Library                               |
 | -------------- | ------------------------------------- |
-| WebSocket+TLS  | [IXWebSocket](https://github.com/machinezone/IXWebSocket) (built via CMake FetchContent) |
+| WebSocket+TLS  | [IXWebSocket](https://github.com/machinezone/IXWebSocket) (CMake FetchContent) |
 | JSON           | [nlohmann/json](https://github.com/nlohmann/json)         |
 | Parquet I/O    | [Apache Arrow C++](https://arrow.apache.org/)             |
 | Logging        | [spdlog](https://github.com/gabime/spdlog)                |
@@ -30,55 +30,123 @@ bash scripts/install_deps.sh
 This installs (via Homebrew): `cmake`, `pkg-config`, `openssl@3`,
 `nlohmann-json`, `apache-arrow`, `spdlog`, `fmt`, `googletest`.
 
-IXWebSocket is fetched and built automatically by CMake at configure time
-(it was removed from Homebrew core, so we pin its source via FetchContent).
+IXWebSocket is fetched and built automatically by CMake at configure time.
 
 ## Configuration
 
-XTB credentials live in a gitignored `.env` file at repo root. Bootstrap it:
+XTB credentials live in a gitignored `.env` file at repo root:
 
 ```bash
 cp .env.example .env
 $EDITOR .env   # fill in XTB_USER_ID and XTB_PASSWORD from your demo email
 ```
 
-How to get a demo account: sign up at [xtb.com](https://www.xtb.com) → "Open
-demo account". Your 7-digit account number is your `XTB_USER_ID`. The same
-credentials work in xStation 5 web platform — verify there first.
+**Demo endpoint:** `wss://ws.xapi.pro/demo` (legacy `ws.xtb.com` was disabled
+2025-03-14). Use demo credentials only during development.
 
-## Build & run
+How to get a demo account: sign up at [xtb.com](https://www.xtb.com) → "Open
+demo account". Your account number is `XTB_USER_ID`. Verify login in xStation 5
+first.
+
+## Build
 
 ```bash
-cmake -S . -B build
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build -j
-./build/app --help
+```
+
+Binaries:
+
+| Target        | Purpose                          |
+| ------------- | -------------------------------- |
+| `./build/app` | Production CLI (`--check`, etc.) |
+| `./build/dev_main` | Scratchpad — backfill experiments |
+| `./build/test_environment` | Unit tests                 |
+
+Run tests:
+
+```bash
+./build/test_environment
+```
+
+## Backfill (dev_main)
+
+End-to-end historical fetch: connect → login → chunked backfill → Parquet.
+
+```bash
+mkdir -p data
+
+./build/dev_main --backfill \
+  --symbol EURUSD \
+  --period H1 \
+  --out data/EURUSD_H1.parquet \
+  --from 2024-01-01
+```
+
+| Flag       | Required | Description |
+| ---------- | -------- | ----------- |
+| `--backfill` | yes    | Run backfill mode |
+| `--symbol`   | yes    | Instrument, e.g. `EURUSD`, `USDJPY` |
+| `--period`   | yes    | `M1`, `M5`, `M15`, `M30`, `H1`, `H4`, `D1`, `W1`, `MN1` |
+| `--out`      | yes    | Output Parquet path (one file per symbol+period) |
+| `--from`     | no     | ISO-8601 start date. Default: 24h ago (M1/M5) or 2 years (others) |
+
+Re-running the same command appends only missing bars (`readLastTimestamp` smart
+resume). Throttle defaults to 250 ms between XTB requests.
+
+Example — multiple symbols (run separately for now):
+
+```bash
+./build/dev_main --backfill --symbol EURUSD --period H1 --out data/EURUSD_H1.parquet --from 2024-01-01
+./build/dev_main --backfill --symbol USDJPY --period H1 --out data/USDJPY_H1.parquet --from 2024-01-01
+```
+
+### Inspect Parquet (optional)
+
+```bash
+duckdb -c "SELECT * FROM 'data/EURUSD_H1.parquet' LIMIT 5;"
 ```
 
 ## Project layout
 
 ```
 algo-trading/
-├── app/                  # Executable entry points
+├── app/
 │   ├── main.cpp          # Production CLI
-│   └── dev_main.cpp      # Scratchpad / experiments
-├── header/               # Public headers (one folder per module)
-│   ├── xtb/              # XTB API client
-│   ├── storage/          # Parquet writer
-│   └── util/             # Logging, env loading
+│   └── dev_main.cpp      # Backfill scratchpad (promote to main when stable)
+├── header/
+│   ├── backfill/         # BackfillEngine
+│   ├── xtb/              # Client + api wrappers
+│   ├── storage/          # ParquetWriter
+│   └── util/             # time, env, logging
 ├── src/                  # Implementations mirroring header/
-├── unit_tests/           # GoogleTest suites
-├── scripts/              # Dev helpers (deps install, etc.)
-├── config/               # Runtime config files (gitignored content)
-├── cache/                # Output Parquet files (gitignored)
+├── unit_tests/
+├── docs/                 # Design notes (time, timestamps, …)
+├── scripts/
+├── data/                 # Parquet output (gitignored — create locally)
 └── CMakeLists.txt
 ```
 
-## Roadmap
+Parquet schema per file: `timestamp[ms,UTC]`, `open`, `high`, `low`, `close`,
+`volume` (all `float64` except timestamp).
 
-- [x] Step 1 — build scaffold, deps, initial commit
-- [ ] Step 2 — IXWebSocket + XTB login + `getServerTime` ping
-- [ ] Step 3 — `getChartRangeRequest` M1 + JSON → typed bars (price normalization via `digits`)
-- [ ] Step 4 — Parquet writer (Arrow) with append + `read_last_timestamp` (smart resume)
-- [ ] Step 5 — chunked backfill engine with throttling (≥250 ms) and retry/backoff
-- [ ] Step 6 — first end-to-end run: `PKN.PL`, 7 days M1 → `cache/PKN.PL.parquet`
-- [ ] Phase 2 — live streaming (`/demoStream`, `getCandles` subscription)
+## Implementation status
+
+- [x] XTB WebSocket client (`connect`, `login`, `call`, throttle)
+- [x] API wrappers: `getServerTime`, `getChartRange` (XTB price decoding)
+- [x] ParquetWriter: write, append, readAll, readLastTimestamp
+- [x] BackfillEngine: chunked `runOne`, multi-symbol `run`
+- [x] dev_main backfill CLI
+- [ ] First verified live demo fetch (manual smoke test)
+- [ ] Promote backfill CLI from dev_main → app/main
+- [ ] Phase 2 — live streaming + strategy daemon
+
+## Roadmap (original steps)
+
+- [x] Step 1 — build scaffold, deps
+- [x] Step 2 — IXWebSocket + XTB login
+- [x] Step 3 — `getChartRangeRequest` + typed bars
+- [x] Step 4 — Parquet writer with append + smart resume
+- [x] Step 5 — BackfillEngine + dev_main CLI
+- [ ] Step 6 — first end-to-end demo run + DuckDB sanity check
+- [ ] Phase 2 — live streaming (`/demoStream`)
