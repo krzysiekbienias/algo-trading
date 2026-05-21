@@ -14,9 +14,12 @@ namespace at::backfill {
 
 BackfillEngine::BackfillEngine(Config config) : config_(std::move(config)) {}
 
-int BackfillEngine::run(at::xtb::Client& /*client*/) const {
-    // TODO: implement — iterate config_.symbols, call runOne() for each
-    return 0;
+int BackfillEngine::run(at::xtb::Client& client) const {
+    int total = 0;
+    for (const auto& sym : config_.symbols) {
+        total += runOne(client, sym);
+    }
+    return total;
 }
 
 int BackfillEngine::runOne(at::xtb::Client& client, const SymbolConfig& sym) const {
