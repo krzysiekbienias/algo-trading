@@ -1,0 +1,38 @@
+[project]
+name = "quant-sandbox"
+version = "0.1.0"
+description = "Python research sandbox for algo-trading data lake (Jupyter + Parquet loader)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pyarrow>=15.0.0",
+    "pandas>=2.2.0",
+    "duckdb>=1.0.0",
+    "jupyterlab>=4.0.0",
+    "ipykernel>=6.29.0",
+    "matplotlib>=3.8.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.4.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]

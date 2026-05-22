@@ -87,8 +87,16 @@ data_lake_m1/**
 logs/
 *.log
 
-# Python venv used for ad-hoc parquet inspection
+# Python venv / quant_sandbox
 .venv/
+quant_sandbox/.venv/
+quant_sandbox/.env
+**/.ipynb_checkpoints/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+
 __pycache__/
 
 .cache/
