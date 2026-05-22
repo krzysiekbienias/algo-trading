@@ -159,6 +159,7 @@ algo-trading/
 ├── scripts/
 ├── data_lake/            # Default harvest output (gitignored)
 ├── data_lake_m1/         # Optional: minute-bar lake (gitignored)
+├── quant_sandbox/        # Python + Jupyter research (see docs/quant_sandbox.md)
 └── CMakeLists.txt
 ```
 
@@ -183,6 +184,7 @@ du -sh data_lake_m1/*
 - [x] `dev_main`: `--ibkr-check`, `--harvest-test`, `--harvest`
 - [ ] GPW / WSE stocks (`exchange`, `currency` presets)
 - [ ] Promote harvest CLI from dev_main → app/main
+- [ ] **Phase 2a** — `quant_sandbox` (Python venv, Jupyter, Parquet loader) — [docs/quant_sandbox.md](docs/quant_sandbox.md)
 - [ ] Phase 2 — live market data + strategy daemon
 
 ## Roadmap
@@ -193,4 +195,5 @@ du -sh data_lake_m1/*
 - [x] Step 4 — harvester + data lake + dev_main CLI
 - [x] Step 5 — end-to-end harvest (US stocks H1/M1, FX)
 - [ ] Step 6 — GPW preset, promote CLI to app/main
+- [ ] Step 7 — quant_sandbox layout + loader + Jupyter (`./scripts/setup_quant_sandbox.sh`)
 - [ ] Phase 2 — live streaming + execution
