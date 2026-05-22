@@ -80,6 +80,8 @@ data/
 # Monthly OHLCV shards from IBKR harvester (keep directory skeleton only).
 data_lake/**
 !data_lake/.gitkeep
+data_lake_m1/**
+!data_lake_m1/.gitkeep
 
 # Logs
 logs/

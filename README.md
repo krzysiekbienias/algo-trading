@@ -5,8 +5,8 @@ C++20 data pipeline for algorithmic trading: connect to
 persist OHLCV bars to columnar Parquet files for downstream backtesting and
 research (DuckDB, Polars, pandas).
 
-> **Phase 1 (current):** TWS connectivity smoke test (`reqCurrentTime`).
-> Historical backfill via `reqHistoricalData` → Parquet is next.
+> **Phase 1 (current):** IBKR TWS connectivity + historical harvest into a local
+> **data lake** (monthly Parquet shards). Live streaming and execution come later.
 
 ## Stack
 
@@ -94,7 +94,7 @@ Binaries:
 | Target        | Purpose                          |
 | ------------- | -------------------------------- |
 | `./build/app` | Production CLI (`--check`, etc.) |
-| `./build/dev_main` | IBKR experiments (`--ibkr-check`) |
+| `./build/dev_main` | IBKR smoke test + historical harvest CLI |
 | `./build/test_environment` | Unit tests                 |
 
 Run tests:
@@ -114,6 +114,31 @@ Verify TWS is reachable and the API responds:
 Expected: log line with TWS server time (Unix epoch seconds). Requires TWS
 running with API enabled and `.env` pointing at the correct port.
 
+## Historical harvest (dev_main)
+
+Backfill OHLCV from TWS into monthly Parquet files under `data_lake/` (or a custom
+root). Full reference: **[docs/harvest.md](docs/harvest.md)**.
+
+Quick examples:
+
+```bash
+# US stock, hourly (default)
+./build/dev_main --harvest --symbol NVDA --from 2026-04-01
+
+# FX spot
+./build/dev_main --harvest --asset fx --symbol EUR.USD --from 2026-05-01
+
+# One-minute bars — use a separate lake root (do not mix with hourly shards)
+./build/dev_main --harvest --symbol NVDA --from 2024-05-01 \
+  --bar-size "1 min" --chunk "1 W" --data-lake data_lake_m1
+```
+
+Layout: `data_lake/{SYMBOL}/{SYMBOL}_{YYYY}_{MM}.parquet` (FX `EUR.USD` → `EURUSD/`).
+Harvest walks **backward** from now to `--from` in `--chunk` windows; re-runs **resume**
+from the oldest bar already on disk.
+
+Long jobs: run with `nohup` in Terminal.app — see [docs/harvest.md](docs/harvest.md).
+
 ## Project layout
 
 ```
@@ -122,16 +147,18 @@ algo-trading/
 │   ├── main.cpp          # Production CLI
 │   └── dev_main.cpp      # IBKR scratchpad
 ├── header/
-│   ├── ibkr/             # TWS Session wrapper
+│   ├── harvest/          # Backfill orchestration
+│   ├── ibkr/             # TWS Session, contracts, FX pairs
 │   ├── market/           # OHLCV Bar type
-│   ├── storage/          # ParquetWriter
+│   ├── storage/          # ParquetWriter, data_lake_paths
 │   └── util/             # time, env, logging
 ├── src/                  # Implementations mirroring header/
 ├── cmake/TwsApi.cmake    # Builds official TWS C++ client
 ├── unit_tests/
-├── docs/                 # Design notes (time, timestamps, …)
+├── docs/                 # Design notes (time, harvest, …)
 ├── scripts/
-├── data/                 # Parquet output (gitignored — create locally)
+├── data_lake/            # Default harvest output (gitignored)
+├── data_lake_m1/         # Optional: minute-bar lake (gitignored)
 └── CMakeLists.txt
 ```
 
@@ -141,24 +168,29 @@ Parquet schema per file: `timestamp[ms,UTC]`, `open`, `high`, `low`, `close`,
 ### Inspect Parquet (optional)
 
 ```bash
-duckdb -c "SELECT * FROM 'data/EURUSD_H1.parquet' LIMIT 5;"
+duckdb -c "SELECT COUNT(*) FROM 'data_lake_m1/NVDA/*.parquet';"
+duckdb -c "SELECT * FROM 'data_lake/EURUSD/EURUSD_2026_05.parquet' LIMIT 5;"
+du -sh data_lake_m1/*
 ```
 
 ## Implementation status
 
 - [x] ParquetWriter: write, append, readAll, readLastTimestamp
-- [x] `at::time` — UTC ms timestamps, ISO-8601 parse/format
-- [x] IBKR Session: connect, `reqCurrentTime`, disconnect
-- [x] `dev_main --ibkr-check` smoke test
-- [ ] `reqHistoricalData` → `at::market::Bar` → Parquet backfill
-- [ ] Promote backfill CLI from dev_main → app/main
+- [x] `at::time` — UTC ms timestamps, ISO-8601, TWS historical `endDateTime` (UTC)
+- [x] IBKR Session: connect, `reqCurrentTime`, `reqHistoricalBars`, pacing 162
+- [x] Data lake paths + monthly shards
+- [x] Harvester: backward chunks, resume, `--asset stock|fx`
+- [x] `dev_main`: `--ibkr-check`, `--harvest-test`, `--harvest`
+- [ ] GPW / WSE stocks (`exchange`, `currency` presets)
+- [ ] Promote harvest CLI from dev_main → app/main
 - [ ] Phase 2 — live market data + strategy daemon
 
 ## Roadmap
 
 - [x] Step 1 — build scaffold, Arrow/Parquet, env, tests
 - [x] Step 2 — IBKR TWS connect + server time
-- [ ] Step 3 — historical bars via TWS API
-- [ ] Step 4 — backfill engine + CLI
-- [ ] Step 5 — first end-to-end run + DuckDB sanity check
+- [x] Step 3 — historical bars via TWS API
+- [x] Step 4 — harvester + data lake + dev_main CLI
+- [x] Step 5 — end-to-end harvest (US stocks H1/M1, FX)
+- [ ] Step 6 — GPW preset, promote CLI to app/main
 - [ ] Phase 2 — live streaming + execution

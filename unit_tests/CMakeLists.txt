@@ -2,6 +2,10 @@ file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/test_*.cpp"
 )
 
+if(NOT ENABLE_IBKR)
+    list(FILTER TEST_SOURCES EXCLUDE REGEX "test_ibkr_forex_pair\\.cpp$")
+endif()
+
 if(TEST_SOURCES STREQUAL "")
     message(STATUS "No unit tests found (add unit_tests/test_*.cpp).")
     return()
@@ -21,6 +25,10 @@ target_link_libraries(test_environment
         GTest::gtest
         GTest::gtest_main
 )
+
+if(ENABLE_IBKR)
+    target_link_libraries(test_environment PRIVATE ibkr_session)
+endif()
 
 # Expose the fixtures directory as a compile-time constant so tests can locate
 # fixture files regardless of the working directory they are launched from.

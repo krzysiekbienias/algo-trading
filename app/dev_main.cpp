@@ -27,21 +27,26 @@ namespace {
 
 void print_usage(const char* argv0) {
     std::cout << "Usage: " << argv0 << " --ibkr-check\n"
-              << "       " << argv0 << " --harvest-test [SYMBOL]\n"
+              << "       " << argv0 << " --harvest-test [--asset stock|fx] [SYMBOL]\n"
               << "       " << argv0 << " --harvest --symbol SYMBOL --from DATE [options]\n"
               << "       " << argv0 << " --help\n"
               << "\n"
               << "IBKR TWS (requires TWS / IB Gateway with API enabled):\n"
               << "  --ibkr-check       Connect and call reqCurrentTime.\n"
-              << "  --harvest-test     Fetch 1 day of 1-hour bars (default symbol: AAPL).\n"
+              << "  --harvest-test     Fetch 1 day of 1-hour bars (default: AAPL stock).\n"
               << "  --harvest          Backfill into data_lake/ (monthly Parquet shards).\n"
               << "\n"
               << "Harvest options:\n"
-              << "  --symbol SYMBOL    Required, e.g. AAPL, NVDA.\n"
+              << "  --asset CLASS      stock (default) or fx.\n"
+              << "  --symbol SYMBOL    Required. Stock: AAPL. FX: EUR.USD or EURUSD.\n"
               << "  --from DATE        Required ISO date, e.g. 2024-01-01.\n"
               << "  --bar-size SIZE    Default: \"1 hour\".\n"
               << "  --data-lake PATH   Default: data_lake.\n"
               << "  --chunk DURATION   IBKR duration per request, default: 2 W.\n"
+              << "\n"
+              << "Examples:\n"
+              << "  " << argv0 << " --harvest-test --asset fx EUR.USD\n"
+              << "  " << argv0 << " --harvest --asset fx --symbol EUR.USD --from 2026-05-01\n"
               << "\n"
               << "Env: IBKR_HOST, IBKR_PORT, IBKR_CLIENT_ID\n"
               << "      HARVEST_SLEEP_MS (default 12000), HARVEST_PACING_SLEEP_MS (60000)\n"
@@ -95,21 +100,47 @@ int run_ibkr_check() {
     return 0;
 }
 
-int run_harvest_test(std::string_view symbol) {
+struct HarvestTestCli {
+    at::harvest::AssetClass asset = at::harvest::AssetClass::Stock;
+    std::string symbol = "AAPL";
+};
+
+HarvestTestCli parse_harvest_test_args(int argc, char** argv) {
+    HarvestTestCli cli;
+    for (int i = 2; i < argc; ++i) {
+        const std::string_view flag = argv[i];
+        if (flag == "--asset") {
+            if (i + 1 >= argc) {
+                throw std::runtime_error("--asset requires a value");
+            }
+            cli.asset = at::harvest::parseAssetClass(argv[++i]);
+            continue;
+        }
+        cli.symbol = argv[i];
+    }
+    return cli;
+}
+
+int run_harvest_test(int argc, char** argv) {
     const auto env_path = find_env_file();
     spdlog::info("Loading env from: {}", env_path.string());
     at::env::loadIntoProcess(env_path);
 
+    const auto cli = parse_harvest_test_args(argc, argv);
+
+    at::harvest::HarvesterConfig cfg{.symbol = cli.symbol, .asset_class = cli.asset};
+    at::harvest::applyAssetDefaults(cfg);
+
     at::ibkr::Session session(load_ibkr_config());
     session.connect();
 
-    const Contract contract = at::ibkr::makeStockSmart(std::string(symbol));
+    const Contract contract = at::harvest::makeContract(cfg);
     at::ibkr::HistoricalRequest req{
         .end_date_time    = "",
         .duration_str     = "1 D",
         .bar_size_setting = "1 hour",
-        .what_to_show     = "TRADES",
-        .use_rth          = 1,
+        .what_to_show     = cfg.what_to_show,
+        .use_rth          = cfg.use_rth,
         .format_date      = 1,
         .timeout          = std::chrono::seconds(90),
     };
@@ -117,7 +148,8 @@ int run_harvest_test(std::string_view symbol) {
     const auto bars = session.reqHistoricalBars(contract, req);
     session.disconnect();
 
-    spdlog::info("harvest-test: {} bars for {}", bars.size(), symbol);
+    spdlog::info("harvest-test: {} bars for {} (asset={})", bars.size(), cli.symbol,
+                 cli.asset == at::harvest::AssetClass::Fx ? "fx" : "stock");
     if (!bars.empty()) {
         spdlog::info("harvest-test: first ts epoch_ms={}",
                      at::time::toEpochMs(bars.front().timestamp));
@@ -128,6 +160,7 @@ int run_harvest_test(std::string_view symbol) {
 }
 
 struct HarvestCliArgs {
+    at::harvest::AssetClass asset = at::harvest::AssetClass::Stock;
     std::string symbol;
     std::string from_date;
     std::string bar_size = "1 hour";
@@ -143,6 +176,13 @@ HarvestCliArgs parse_harvest_args(int argc, char** argv) {
         const std::string_view flag = argv[i];
         if (flag == "--harvest") {
             seen_harvest = true;
+            continue;
+        }
+        if (flag == "--asset") {
+            if (i + 1 >= argc) {
+                throw std::runtime_error("--asset requires a value");
+            }
+            args.asset = at::harvest::parseAssetClass(argv[++i]);
             continue;
         }
         if (flag == "--symbol") {
@@ -204,6 +244,7 @@ int run_harvest(int argc, char** argv) {
     }
 
     at::harvest::HarvesterConfig cfg{
+        .asset_class          = cli.asset,
         .data_lake_root       = cli.data_lake,
         .symbol               = cli.symbol,
         .bar_size_setting     = cli.bar_size,
@@ -214,6 +255,7 @@ int run_harvest(int argc, char** argv) {
         .pacing_retry_sleep   = std::chrono::milliseconds(
             std::stoll(at::env::getOr("HARVEST_PACING_SLEEP_MS", "60000"))),
     };
+    at::harvest::applyAssetDefaults(cfg);
 
     at::ibkr::Session session(load_ibkr_config());
     session.connect();
@@ -245,9 +287,7 @@ int main(int argc, char** argv) {
             return run_ibkr_check();
         }
         if (cmd == "--harvest-test") {
-            const std::string_view symbol =
-                (argc >= 3) ? std::string_view{argv[2]} : std::string_view{"AAPL"};
-            return run_harvest_test(symbol);
+            return run_harvest_test(argc, argv);
         }
         if (cmd == "--harvest") {
             return run_harvest(argc, argv);

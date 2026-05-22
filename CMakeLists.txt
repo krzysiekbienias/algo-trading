@@ -79,10 +79,18 @@ if(ENABLE_IBKR)
     add_library(ibkr_session STATIC
         src/ibkr/session.cpp
         src/ibkr/contract.cpp
+        src/ibkr/forex_pair.cpp
     )
     target_include_directories(ibkr_session PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/header)
     target_link_libraries(ibkr_session PUBLIC twsapi spdlog::spdlog)
     target_compile_options(ibkr_session PRIVATE
+        -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wno-sign-conversion
+    )
+
+    add_library(harvest_lib STATIC src/harvest/harvester.cpp)
+    target_include_directories(harvest_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/header)
+    target_link_libraries(harvest_lib PUBLIC core_lib ibkr_session)
+    target_compile_options(harvest_lib PRIVATE
         -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wno-sign-conversion
     )
 endif()
@@ -103,7 +111,7 @@ if(ENABLE_DEV_MAIN AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/app/dev_main.cpp")
     target_link_libraries(dev_main PRIVATE core_lib)
     target_compile_definitions(dev_main PRIVATE DEV_MAIN_BUILD=1)
     if(ENABLE_IBKR)
-        target_link_libraries(dev_main PRIVATE ibkr_session)
+        target_link_libraries(dev_main PRIVATE ibkr_session harvest_lib)
         target_compile_definitions(dev_main PRIVATE ENABLE_IBKR=1)
         # twsapi is built as a shared library in the build tree.
         set_target_properties(dev_main PROPERTIES
