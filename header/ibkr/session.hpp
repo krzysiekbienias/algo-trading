@@ -3,10 +3,15 @@
 #include <chrono>
 #include <cstdint>
 #include <string>
+#include <vector>
+
+#include "ibkr/historical.hpp"
+#include "market/types.hpp"
+
+struct Contract;
 
 namespace at::ibkr {
 
-// Connection settings for Trader Workstation / IB Gateway socket API.
 struct SessionConfig {
     std::string host = "127.0.0.1";
     int port = 7497;  // paper default; live = 7496
@@ -14,7 +19,6 @@ struct SessionConfig {
     std::chrono::milliseconds timeout = std::chrono::seconds(15);
 };
 
-// Thin wrapper around IBKR EClientSocket: connect + reqCurrentTime smoke test.
 class Session {
 public:
     explicit Session(SessionConfig config = {});
@@ -25,6 +29,12 @@ public:
 
     void connect();
     std::int64_t reqCurrentTime();
+
+    // One synchronous historical chunk: blocks until historicalDataEnd (or error).
+    // May throw PacingViolationError on IBKR error 162.
+    std::vector<at::market::Bar> reqHistoricalBars(const Contract& contract,
+                                                   const HistoricalRequest& request);
+
     void disconnect();
 
     [[nodiscard]] bool isConnected() const;

@@ -76,7 +76,10 @@ target_compile_options(core_lib PRIVATE
 )
 
 if(ENABLE_IBKR)
-    add_library(ibkr_session STATIC src/ibkr/session.cpp)
+    add_library(ibkr_session STATIC
+        src/ibkr/session.cpp
+        src/ibkr/contract.cpp
+    )
     target_include_directories(ibkr_session PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/header)
     target_link_libraries(ibkr_session PUBLIC twsapi spdlog::spdlog)
     target_compile_options(ibkr_session PRIVATE
