@@ -8,7 +8,7 @@ namespace at::ibkr {
 
 // Parameters for one reqHistoricalData call (single chunk).
 struct HistoricalRequest {
-    // Empty = current time. Otherwise "YYYYMMDD HH:mm:ss" UTC (TWS format).
+    // Empty = current time. Otherwise IBKR UTC "yyyymmdd-hh:mm:ss" (see formatTwsHistoricalEndUtc).
     std::string end_date_time;
     // e.g. "1 D", "2 W", "1 M"
     std::string duration_str = "1 D";
