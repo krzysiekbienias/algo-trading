@@ -71,7 +71,7 @@ unit_tests/test_smoke.cpp
 .env.local
 *.secret
 
-# Collected market data (can be huge, regenerate from XTB on demand).
+# Collected market data (can be huge, regenerate from TWS backfill on demand).
 # Narrow rule: only files INSIDE these dirs are ignored. Small parquet
 # fixtures in unit_tests/fixtures/ stay trackable for tests.
 cache/

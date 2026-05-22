@@ -13,16 +13,13 @@ PACKAGES=(
     ninja               # fast build backend for scripts/build.sh
     llvm                # clang-format (scripts/format.sh)
     pkg-config          # transitive use by Arrow et al.
-    openssl@3           # TLS backend for IXWebSocket
+    openssl@3           # system TLS (TWS API / tooling)
     nlohmann-json       # JSON parser (header-only)
     apache-arrow        # Provides Arrow + Parquet C++
     spdlog              # Logging
     fmt                 # spdlog dep + general formatting
     googletest          # Unit tests
 )
-# NOTE: IXWebSocket is fetched via CMake FetchContent (it was removed from
-# Homebrew core), so it is NOT in this list.
-
 echo "Installing dependencies via Homebrew..."
 for pkg in "${PACKAGES[@]}"; do
     if brew list --versions "$pkg" >/dev/null 2>&1; then
