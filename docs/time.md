@@ -10,7 +10,7 @@
 Centralny moduł odpowiedzialny za reprezentację i konwersję znaczników czasu
 (timestamps) w całym projekcie. Zapewnia jeden kanoniczny typ (`Timestamp`)
 i zestaw funkcji pomocniczych do konwersji między formatami używanymi przez:
-- **XTB API** — pole `ctm` w milisekundach od Unix epoch (UTC)
+- **IBKR TWS API** — `reqHistoricalData` bar time, `currentTime` (sekundy → ms)
 - **Apache Arrow / Parquet** — `timestamp[ms, UTC]` = int64 ms od epoch
 - **Człowiek** — łańcuchy ISO-8601 (`2026-05-06T17:42:13.123Z`)
 
@@ -35,7 +35,7 @@ innego", bo jest to typ, a nie gołe `int64`.
 std::int64_t toEpochMs(Timestamp tp) noexcept;
 ```
 Zwraca liczbę milisekund od Unix epoch (1970-01-01T00:00:00Z).
-Jest to **wire format** stosowany przez XTB API i Apache Parquet.
+Jest to **wire format** stosowany przez Parquet i większość broker API (UTC ms).
 
 | Argument | Typ         | Opis                        |
 |----------|-------------|---------------------------- |
@@ -54,11 +54,11 @@ std::int64_t ms = at::time::toEpochMs(t); // 946684800000
 Timestamp fromEpochMs(std::int64_t ms) noexcept;
 ```
 Inverse `toEpochMs`. Tworzy `Timestamp` z liczby milisekund od Unix epoch.
-Używany bezpośrednio przy parsowaniu pola `ctm` z XTB API.
+Używany przy budowaniu `at::market::Bar` z danych historycznych TWS.
 
 **Przykład:**
 ```cpp
-// XTB ctm = 1746529333123
+// bar time in epoch ms
 auto tp = at::time::fromEpochMs(1'746'529'333'123LL);
 ```
 
@@ -144,5 +144,5 @@ if (tp) {
   bez alokacji, więc `noexcept` jest zgodne z prawdą i pozwala kompilatorowi
   na lepszą optymalizację.
 - **`std::nullopt` zamiast wyjątku** — `parseIso8601` może dostawać dane
-  z zewnątrz (CLI, XTB API), więc błąd parsowania to oczekiwana ścieżka,
+  z zewnątrz (CLI, konfiguracja), więc błąd parsowania to oczekiwana ścieżka,
   nie wyjątek.

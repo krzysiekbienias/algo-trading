@@ -19,15 +19,15 @@ namespace at::storage {
 
 ParquetWriter::ParquetWriter(std::filesystem::path path) : path_(std::move(path)) {}
 
-void ParquetWriter::write(const std::vector<at::xtb::Bar>& bars) const {
+void ParquetWriter::write(const std::vector<at::market::Bar>& bars) const {
     if (bars.empty()) {
         return;
     }
 
     // Sort bars by timestamp ascending so the on-disk order is canonical.
-    std::vector<at::xtb::Bar> sorted_bars = bars;
+    std::vector<at::market::Bar> sorted_bars = bars;
     std::sort(sorted_bars.begin(), sorted_bars.end(),
-              [](const at::xtb::Bar& a, const at::xtb::Bar& b) {
+              [](const at::market::Bar& a, const at::market::Bar& b) {
                   return at::time::toEpochMs(a.timestamp) <
                          at::time::toEpochMs(b.timestamp);
               });
@@ -81,7 +81,7 @@ void ParquetWriter::write(const std::vector<at::xtb::Bar>& bars) const {
         static_cast<int64_t>(sorted_bars.size())));
 }
 
-void ParquetWriter::append(const std::vector<at::xtb::Bar>& bars) const {
+void ParquetWriter::append(const std::vector<at::market::Bar>& bars) const {
     if (bars.empty()) {
         return;
     }
@@ -94,7 +94,7 @@ void ParquetWriter::append(const std::vector<at::xtb::Bar>& bars) const {
     //   * entries stay sorted by timestamp
     // Old bars go in first, new bars go in second — new bars overwrite old on
     // duplicate timestamps ("newer wins" contract from the header).
-    std::map<int64_t, at::xtb::Bar> merged;
+    std::map<int64_t, at::market::Bar> merged;
     for (const auto& b : existing) {
         merged[at::time::toEpochMs(b.timestamp)] = b;
     }
@@ -103,7 +103,7 @@ void ParquetWriter::append(const std::vector<at::xtb::Bar>& bars) const {
     }
 
     // Flatten back into a vector (map iteration is already sorted by key).
-    std::vector<at::xtb::Bar> merged_bars;
+    std::vector<at::market::Bar> merged_bars;
     merged_bars.reserve(merged.size());
     for (auto& [ts, bar] : merged) {
         merged_bars.push_back(std::move(bar));
@@ -120,7 +120,7 @@ std::optional<at::time::Timestamp> ParquetWriter::readLastTimestamp() const {
     return bars.back().timestamp;
 }
 
-std::vector<at::xtb::Bar> ParquetWriter::readAll() const {
+std::vector<at::market::Bar> ParquetWriter::readAll() const {
     // Step 1: file does not exist → no bars.
     if (!std::filesystem::exists(path_)) {
         return {};
@@ -169,11 +169,11 @@ std::vector<at::xtb::Bar> ParquetWriter::readAll() const {
 
     // Step 7: rebuild Bar structs row-by-row. reserve() avoids re-allocations.
     const int64_t n = timestamps->length();
-    std::vector<at::xtb::Bar> result;
+    std::vector<at::market::Bar> result;
     result.reserve(static_cast<size_t>(n));
 
     for (int64_t i = 0; i < n; ++i) {
-        result.push_back(at::xtb::Bar{
+        result.push_back(at::market::Bar{
             at::time::fromEpochMs(timestamps->Value(i)),
             opens->Value(i),
             highs->Value(i),

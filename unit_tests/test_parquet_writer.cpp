@@ -2,7 +2,7 @@
 
 #include "storage/parquet_writer.hpp"
 #include "util/time.hpp"
-#include "xtb/types.hpp"
+#include "market/types.hpp"
 
 #include <filesystem>
 #include <vector>
@@ -10,7 +10,7 @@
 using at::storage::ParquetWriter;
 using at::time::fromEpochMs;
 using at::time::toEpochMs;
-using at::xtb::Bar;
+using at::market::Bar;
 
 // Temporary directory for files created during tests.
 // Each test gets a fresh file via SetUp() / TearDown().

@@ -11,10 +11,9 @@ namespace at::time {
 // Canonical timestamp type used everywhere in the codebase.
 //
 // Why this exact type?
-//   * XTB's `ctm` field in `getChartRangeRequest` returns milliseconds since
-//     Unix epoch in UTC. One-to-one match with `sys_time<milliseconds>`, so
-//     parsing is a single explicit cast — no precision loss, no timezone
-//     ambiguity.
+//   * Broker APIs and Parquet both use milliseconds since Unix epoch (UTC).
+//     One-to-one match with `sys_time<milliseconds>` — no precision loss, no
+//     timezone ambiguity.
 //   * Apache Arrow's `timestamp[ms, UTC]` maps to the same underlying
 //     int64 representation. Storage round-trips are lossless.
 //   * Using a strong type (instead of raw int64) prevents the classic
@@ -31,12 +30,12 @@ inline std::int64_t toEpochMs(Timestamp tp) noexcept {
     return tp.time_since_epoch().count();
 }
 
-// Inverse of toEpochMs(). XTB's `ctm` field plugs straight into here.
+// Inverse of toEpochMs().
 inline Timestamp fromEpochMs(std::int64_t ms) noexcept {
     return Timestamp{std::chrono::milliseconds{ms}};
 }
 
-// Convenience helpers for human-friendly horizons used by the backfill CLI.
+// Convenience helper for epoch-second inputs (e.g. TWS server time).
 inline Timestamp fromEpochSeconds(std::int64_t s) noexcept {
     return Timestamp{std::chrono::milliseconds{s * 1000}};
 }
