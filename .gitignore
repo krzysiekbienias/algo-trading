@@ -77,6 +77,10 @@ unit_tests/test_smoke.cpp
 cache/
 data/
 
+# Monthly OHLCV shards from IBKR harvester (keep directory skeleton only).
+data_lake/**
+!data_lake/.gitkeep
+
 # Logs
 logs/
 *.log
