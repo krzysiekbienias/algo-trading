@@ -15,7 +15,13 @@ class Session;
 
 namespace at::harvest {
 
+enum class AssetClass { Stock, Fx };
+
+// CLI / config: "stock" (default) or "fx".
+AssetClass parseAssetClass(std::string_view name);
+
 struct HarvesterConfig {
+    AssetClass asset_class = AssetClass::Stock;
     std::filesystem::path data_lake_root = "data_lake";
     std::string symbol;
     std::string bar_size_setting = "1 hour";
@@ -36,7 +42,10 @@ struct HarvesterConfig {
 // Session must already be connected. Returns total bars appended.
 int run(at::ibkr::Session& session, const HarvesterConfig& config);
 
-// Build STK/SMART contract for the configured symbol (MVP).
+// Build IB Contract from asset_class + symbol (STK/SMART or CASH/IDEALPRO).
 Contract makeContract(const HarvesterConfig& config);
+
+// FX: MIDPOINT + use_rth=0; stocks: TRADES + use_rth=1 (only if still at defaults).
+void applyAssetDefaults(HarvesterConfig& config);
 
 }  // namespace at::harvest

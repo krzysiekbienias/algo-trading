@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "ibkr/contract.hpp"
+#include "ibkr/forex_pair.hpp"
 #include "ibkr/historical.hpp"
 #include "ibkr/session.hpp"
 #include "market/types.hpp"
@@ -139,7 +140,29 @@ std::vector<Bar> requestChunkWithRetry(at::ibkr::Session& session, const Contrac
 
 }  // namespace
 
+AssetClass parseAssetClass(std::string_view name) {
+    if (name == "stock" || name == "stk" || name == "equity") {
+        return AssetClass::Stock;
+    }
+    if (name == "fx" || name == "forex") {
+        return AssetClass::Fx;
+    }
+    throw std::invalid_argument("unknown asset class: " + std::string(name) +
+                                " (use stock or fx)");
+}
+
+void applyAssetDefaults(HarvesterConfig& config) {
+    if (config.asset_class == AssetClass::Fx) {
+        config.what_to_show = "MIDPOINT";
+        config.use_rth      = 0;
+    }
+}
+
 Contract makeContract(const HarvesterConfig& config) {
+    if (config.asset_class == AssetClass::Fx) {
+        const auto pair = at::ibkr::parseForexPair(config.symbol);
+        return at::ibkr::makeForexIdealpro(pair.base, pair.quote);
+    }
     return at::ibkr::makeStockSmart(config.symbol);
 }
 
@@ -164,9 +187,10 @@ int run(at::ibkr::Session& session, const HarvesterConfig& config) {
     int total_bars = 0;
     int chunk_index = 0;
 
-    spdlog::info("harvest: {} bar='{}' from {} backward to {}", config.symbol,
-                 config.bar_size_setting, at::time::formatIso8601(end),
-                 at::time::formatIso8601(target));
+    const char* asset_label = config.asset_class == AssetClass::Fx ? "fx" : "stock";
+    spdlog::info("harvest: {} ({}) bar='{}' what={} from {} backward to {}", config.symbol,
+                 asset_label, config.bar_size_setting, config.what_to_show,
+                 at::time::formatIso8601(end), at::time::formatIso8601(target));
 
     while (end > target) {
         at::ibkr::HistoricalRequest req{
