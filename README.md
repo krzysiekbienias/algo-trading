@@ -1,27 +1,27 @@
 # algo-trading
 
-C++20 data pipeline that pulls historical market data from the
-[XTB xStation 5 API](https://xopenhub.pro/api/xapi-protocol-documentation)
-over WebSocket and persists OHLCV bars to columnar Parquet files for
-downstream backtesting and research (DuckDB, Polars, pandas).
+C++20 data pipeline for algorithmic trading: connect to
+[Interactive Brokers TWS API](https://interactivebrokers.github.io/tws-api/),
+persist OHLCV bars to columnar Parquet files for downstream backtesting and
+research (DuckDB, Polars, pandas).
 
-> **Phase 1 (current):** historical backfill via `getChartRangeRequest` →
-> one Parquet file per symbol/timeframe. Live tick streaming lands in Phase 2.
+> **Phase 1 (current):** TWS connectivity smoke test (`reqCurrentTime`).
+> Historical backfill via `reqHistoricalData` → Parquet is next.
 
 ## Stack
 
 | Concern        | Library                               |
 | -------------- | ------------------------------------- |
-| WebSocket+TLS  | [IXWebSocket](https://github.com/machinezone/IXWebSocket) (CMake FetchContent) |
-| JSON           | [nlohmann/json](https://github.com/nlohmann/json)         |
+| Broker API     | [IBKR TWS API](https://interactivebrokers.github.io/tws-api/) (local `twsapi_macunix`) |
 | Parquet I/O    | [Apache Arrow C++](https://arrow.apache.org/)             |
+| JSON           | [nlohmann/json](https://github.com/nlohmann/json)         |
 | Logging        | [spdlog](https://github.com/gabime/spdlog)                |
 | Tests          | GoogleTest                            |
 | Build          | CMake ≥ 3.20, C++20                   |
 
 ## Prerequisites
 
-macOS with Homebrew. (Linux support trivial — replace `brew` with `apt`/`dnf`.)
+macOS with Homebrew. (Linux support is similar — replace `brew` with `apt`/`dnf`.)
 
 ```bash
 bash scripts/install_deps.sh
@@ -31,23 +31,33 @@ This installs (via Homebrew): `cmake`, `ninja`, `llvm` (clang-format),
 `pkg-config`, `openssl@3`, `nlohmann-json`, `apache-arrow`, `spdlog`, `fmt`,
 `googletest`.
 
-IXWebSocket is fetched and built automatically by CMake at configure time.
+### IBKR TWS API (required for `ENABLE_IBKR=ON`)
+
+Clone the official API next to this repo (sibling directory):
+
+```bash
+cd ..
+git clone https://github.com/InteractiveBrokers/tws-api-public twsapi_macunix
+```
+
+CMake expects `../twsapi_macunix/IBJts/source/cppclient` (see `cmake/TwsApi.cmake`).
+
+### TWS / IB Gateway
+
+1. Install [Trader Workstation](https://www.interactivebrokers.com/en/trading/tws.php) or IB Gateway.
+2. Enable the socket API: **Edit → Global Configuration → API → Settings**
+   - Enable *ActiveX and Socket Clients*
+   - Note the socket port (paper default **7497**, live **7496**)
+3. Keep TWS running while using `dev_main --ibkr-check`.
 
 ## Configuration
 
-XTB credentials live in a gitignored `.env` file at repo root:
+IBKR connection settings live in a gitignored `.env` at repo root:
 
 ```bash
 cp .env.example .env
-$EDITOR .env   # fill in XTB_USER_ID and XTB_PASSWORD from your demo email
+$EDITOR .env   # IBKR_HOST, IBKR_PORT, IBKR_CLIENT_ID
 ```
-
-**Demo endpoint:** `wss://ws.xapi.pro/demo` (legacy `ws.xtb.com` was disabled
-2025-03-14). Use demo credentials only during development.
-
-How to get a demo account: sign up at [xtb.com](https://www.xtb.com) → "Open
-demo account". Your account number is `XTB_USER_ID`. Verify login in xStation 5
-first.
 
 ## Build
 
@@ -64,6 +74,12 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
 cmake --build build -j
 ```
 
+Disable IBKR if the TWS API tree is not available:
+
+```bash
+cmake -S . -B build -DENABLE_IBKR=OFF
+```
+
 Other helpers:
 
 ```bash
@@ -78,7 +94,7 @@ Binaries:
 | Target        | Purpose                          |
 | ------------- | -------------------------------- |
 | `./build/app` | Production CLI (`--check`, etc.) |
-| `./build/dev_main` | Scratchpad — backfill experiments |
+| `./build/dev_main` | IBKR experiments (`--ibkr-check`) |
 | `./build/test_environment` | Unit tests                 |
 
 Run tests:
@@ -87,43 +103,16 @@ Run tests:
 ./build/test_environment
 ```
 
-## Backfill (dev_main)
+## IBKR smoke test (dev_main)
 
-End-to-end historical fetch: connect → login → chunked backfill → Parquet.
-
-```bash
-mkdir -p data
-
-./build/dev_main --backfill \
-  --symbol EURUSD \
-  --period H1 \
-  --out data/EURUSD_H1.parquet \
-  --from 2024-01-01
-```
-
-| Flag       | Required | Description |
-| ---------- | -------- | ----------- |
-| `--backfill` | yes    | Run backfill mode |
-| `--symbol`   | yes    | Instrument, e.g. `EURUSD`, `USDJPY` |
-| `--period`   | yes    | `M1`, `M5`, `M15`, `M30`, `H1`, `H4`, `D1`, `W1`, `MN1` |
-| `--out`      | yes    | Output Parquet path (one file per symbol+period) |
-| `--from`     | no     | ISO-8601 start date. Default: 24h ago (M1/M5) or 2 years (others) |
-
-Re-running the same command appends only missing bars (`readLastTimestamp` smart
-resume). Throttle defaults to 250 ms between XTB requests.
-
-Example — multiple symbols (run separately for now):
+Verify TWS is reachable and the API responds:
 
 ```bash
-./build/dev_main --backfill --symbol EURUSD --period H1 --out data/EURUSD_H1.parquet --from 2024-01-01
-./build/dev_main --backfill --symbol USDJPY --period H1 --out data/USDJPY_H1.parquet --from 2024-01-01
+./build/dev_main --ibkr-check
 ```
 
-### Inspect Parquet (optional)
-
-```bash
-duckdb -c "SELECT * FROM 'data/EURUSD_H1.parquet' LIMIT 5;"
-```
+Expected: log line with TWS server time (Unix epoch seconds). Requires TWS
+running with API enabled and `.env` pointing at the correct port.
 
 ## Project layout
 
@@ -131,13 +120,14 @@ duckdb -c "SELECT * FROM 'data/EURUSD_H1.parquet' LIMIT 5;"
 algo-trading/
 ├── app/
 │   ├── main.cpp          # Production CLI
-│   └── dev_main.cpp      # Backfill scratchpad (promote to main when stable)
+│   └── dev_main.cpp      # IBKR scratchpad
 ├── header/
-│   ├── backfill/         # BackfillEngine
-│   ├── xtb/              # Client + api wrappers
+│   ├── ibkr/             # TWS Session wrapper
+│   ├── market/           # OHLCV Bar type
 │   ├── storage/          # ParquetWriter
 │   └── util/             # time, env, logging
 ├── src/                  # Implementations mirroring header/
+├── cmake/TwsApi.cmake    # Builds official TWS C++ client
 ├── unit_tests/
 ├── docs/                 # Design notes (time, timestamps, …)
 ├── scripts/
@@ -148,23 +138,27 @@ algo-trading/
 Parquet schema per file: `timestamp[ms,UTC]`, `open`, `high`, `low`, `close`,
 `volume` (all `float64` except timestamp).
 
+### Inspect Parquet (optional)
+
+```bash
+duckdb -c "SELECT * FROM 'data/EURUSD_H1.parquet' LIMIT 5;"
+```
+
 ## Implementation status
 
-- [x] XTB WebSocket client (`connect`, `login`, `call`, throttle)
-- [x] API wrappers: `getServerTime`, `getChartRange` (XTB price decoding)
 - [x] ParquetWriter: write, append, readAll, readLastTimestamp
-- [x] BackfillEngine: chunked `runOne`, multi-symbol `run`
-- [x] dev_main backfill CLI
-- [ ] First verified live demo fetch (manual smoke test)
+- [x] `at::time` — UTC ms timestamps, ISO-8601 parse/format
+- [x] IBKR Session: connect, `reqCurrentTime`, disconnect
+- [x] `dev_main --ibkr-check` smoke test
+- [ ] `reqHistoricalData` → `at::market::Bar` → Parquet backfill
 - [ ] Promote backfill CLI from dev_main → app/main
-- [ ] Phase 2 — live streaming + strategy daemon
+- [ ] Phase 2 — live market data + strategy daemon
 
-## Roadmap (original steps)
+## Roadmap
 
-- [x] Step 1 — build scaffold, deps
-- [x] Step 2 — IXWebSocket + XTB login
-- [x] Step 3 — `getChartRangeRequest` + typed bars
-- [x] Step 4 — Parquet writer with append + smart resume
-- [x] Step 5 — BackfillEngine + dev_main CLI
-- [ ] Step 6 — first end-to-end demo run + DuckDB sanity check
-- [ ] Phase 2 — live streaming (`/demoStream`)
+- [x] Step 1 — build scaffold, Arrow/Parquet, env, tests
+- [x] Step 2 — IBKR TWS connect + server time
+- [ ] Step 3 — historical bars via TWS API
+- [ ] Step 4 — backfill engine + CLI
+- [ ] Step 5 — first end-to-end run + DuckDB sanity check
+- [ ] Phase 2 — live streaming + execution
