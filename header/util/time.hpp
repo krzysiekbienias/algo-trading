@@ -50,6 +50,10 @@ inline Timestamp now() noexcept {
 // output. The trailing 'Z' makes the timezone explicit.
 std::string formatIso8601(Timestamp tp);
 
+// IBKR reqHistoricalData endDateTime: explicit UTC, "yyyymmdd-hh:mm:ss"
+// (e.g. "20260522-14:58:08"). Avoids legacy space-separated implied-TZ format.
+std::string formatTwsHistoricalEndUtc(Timestamp tp);
+
 // Parse an ISO-8601 / RFC-3339-style timestamp into our canonical type.
 // Accepts the forms:
 //   2026-05-06                         (date only -> 00:00:00 UTC)

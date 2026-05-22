@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <ctime>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 
@@ -77,6 +78,21 @@ std::optional<Timestamp> parseIso8601(std::string_view s) {
 
     return Timestamp{
         std::chrono::milliseconds{static_cast<std::int64_t>(epoch_sec) * 1000 + ms}};
+}
+
+std::string formatTwsHistoricalEndUtc(Timestamp tp) {
+    const auto ms = toEpochMs(tp);
+    const std::time_t sec = static_cast<std::time_t>(ms / 1000);
+    std::tm t{};
+    if (gmtime_r(&sec, &t) == nullptr) {
+        throw std::runtime_error("formatTwsHistoricalEndUtc: gmtime_r failed");
+    }
+    char buf[32];
+    if (std::snprintf(buf, sizeof(buf), "%04d%02d%02d-%02d:%02d:%02d", t.tm_year + 1900,
+                      t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec) <= 0) {
+        throw std::runtime_error("formatTwsHistoricalEndUtc: snprintf failed");
+    }
+    return buf;
 }
 
 }  // namespace at::time

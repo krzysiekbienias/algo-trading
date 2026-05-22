@@ -98,6 +98,12 @@ TEST(Time, FormatParseRoundTrip) {
     EXPECT_EQ(toEpochMs(*parsed), toEpochMs(original));
 }
 
+// ─── formatTwsHistoricalEndUtc ───────────────────────────────────────────────
+
+TEST(Time, FormatTwsHistoricalEndUtcUsesExplicitUtcSeparator) {
+    EXPECT_EQ(formatTwsHistoricalEndUtc(fromEpochMs(kY2kMs)), "20000101-00:00:00");
+}
+
 // ─── now() ───────────────────────────────────────────────────────────────────
 
 TEST(Time, NowIsAfter2024) {
