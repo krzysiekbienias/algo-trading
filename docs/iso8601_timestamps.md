@@ -39,7 +39,7 @@ Timestamp bez `Z` lub bez offsetu jest niejednoznaczny — dlatego zawsze dodaje
 
 ## Dlaczego w tym projekcie zawsze używamy UTC / `Z`?
 
-- **XTB API** zwraca pole `ctm` w milisekundach od Unix epoch (UTC)
+- **IBKR / Parquet** używają UTC; bary historyczne mapujemy na ms od Unix epoch
 - **Apache Parquet** przechowuje timestampy jako `timestamp[ms, UTC]`
 - Dzięki temu nie ma nigdy pytania *"w jakiej strefie jest ten timestamp?"*
 

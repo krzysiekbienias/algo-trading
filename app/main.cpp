@@ -1,11 +1,9 @@
 // Production CLI for the algo-trading pipeline.
 //
-// Step 1 scope: bootstrap-only — verify that all dependencies link, that
-// logging works, and that we can resolve the .env file. Real backfill logic
-// arrives in Steps 2-6.
+// Bootstrap: verify dependencies link, logging works, and .env resolves.
+// IBKR historical backfill lands in a later step.
 
 #include <arrow/api.h>
-#include <ixwebsocket/IXWebSocketVersion.h>
 #include <nlohmann/json.hpp>
 #include <parquet/api/writer.h>
 #include <spdlog/spdlog.h>
@@ -20,6 +18,10 @@
 #include "util/env.hpp"
 #include "util/log.hpp"
 
+#if defined(ENABLE_IBKR)
+#include "ibkr/session.hpp"
+#endif
+
 namespace {
 
 constexpr std::string_view kVersion = "0.1.0";
@@ -30,26 +32,26 @@ void print_usage(const char* argv0) {
               << "Options:\n"
               << "  --help       Show this message and exit.\n"
               << "  --version    Print version and exit.\n"
-              << "  --check      Run dependency / env smoke check.\n"
-              << "\n"
-              << "Backfill flags (--symbol/--from/--to/--out) land in Step 5.\n";
+              << "  --check      Run dependency / env smoke check.\n";
 }
 
 void print_versions() {
     std::cout << "algo-trading " << kVersion << "\n"
               << "  Arrow C++       : " << arrow::GetBuildInfo().version_string << "\n"
-              << "  IXWebSocket     : " << IX_WEBSOCKET_VERSION << "\n"
               << "  nlohmann_json   : " << NLOHMANN_JSON_VERSION_MAJOR << "."
               << NLOHMANN_JSON_VERSION_MINOR << "." << NLOHMANN_JSON_VERSION_PATCH << "\n"
               << "  spdlog          : " << SPDLOG_VER_MAJOR << "." << SPDLOG_VER_MINOR << "."
               << SPDLOG_VER_PATCH << "\n";
+#if defined(ENABLE_IBKR)
+    std::cout << "  IBKR TWS API    : enabled\n";
+#else
+    std::cout << "  IBKR TWS API    : disabled (reconfigure with -DENABLE_IBKR=ON)\n";
+#endif
 }
 
 int run_check() {
     spdlog::info("Smoke check starting...");
 
-    // Resolve project root by walking up from the executable until we find
-    // a .env or .env.example. Lets the user run ./build/app from any cwd.
     namespace fs = std::filesystem;
     fs::path here = fs::current_path();
     fs::path env_path;
@@ -76,12 +78,19 @@ int run_check() {
         spdlog::info("Loaded {} env entries.", map.size());
     }
 
-    const auto user_id = at::env::get("XTB_USER_ID");
-    if (user_id && !user_id->empty()) {
-        spdlog::info("XTB_USER_ID is set ({} digits).", user_id->size());
+    const auto host = at::env::get("IBKR_HOST");
+    const auto port = at::env::get("IBKR_PORT");
+    if (host && port) {
+        spdlog::info("IBKR endpoint configured: {}:{}", *host, *port);
     } else {
-        spdlog::warn("XTB_USER_ID is not set yet (fill in .env before Step 2).");
+        spdlog::warn("IBKR_HOST / IBKR_PORT not set (see .env.example).");
     }
+
+#if defined(ENABLE_IBKR)
+    spdlog::info("IBKR integration compiled in; use dev_main --ibkr-check for a live TWS test.");
+#else
+    spdlog::warn("Built without ENABLE_IBKR; TWS smoke test unavailable.");
+#endif
 
     spdlog::info("Smoke check OK.");
     return 0;

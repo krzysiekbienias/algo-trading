@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 project(algo_trading
     VERSION 0.1.0
-    DESCRIPTION "Algo-trading data pipeline (XTB -> Parquet)"
+    DESCRIPTION "Algo-trading data pipeline (IBKR TWS -> Parquet)"
     LANGUAGES CXX
 )
 
@@ -29,40 +29,28 @@ endif()
 option(ENABLE_TESTS "Build unit tests" ON)
 option(ENABLE_APP "Build app (production CLI)" ON)
 option(ENABLE_DEV_MAIN "Build dev_main executable (experiments)" ON)
+option(ENABLE_IBKR "Build IBKR TWS API integration (requires sibling twsapi_macunix/IBJts)" ON)
 
 # --- External dependencies ---
 # Heavy / system-y deps come from Homebrew (see scripts/install_deps.sh).
-find_package(OpenSSL REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(Arrow CONFIG REQUIRED)
 find_package(Parquet CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(fmt CONFIG REQUIRED)
 
-# IXWebSocket is small (~5k LOC) and was removed from Homebrew core, so we
-# build it from source via FetchContent. Pin to a stable tag.
-include(FetchContent)
-set(IXWEBSOCKET_VERSION "v11.4.6")
-set(USE_TLS ON CACHE BOOL "" FORCE)
-set(USE_OPEN_SSL ON CACHE BOOL "" FORCE)
-FetchContent_Declare(
-    ixwebsocket
-    GIT_REPOSITORY https://github.com/machinezone/IXWebSocket.git
-    GIT_TAG        ${IXWEBSOCKET_VERSION}
-    GIT_SHALLOW    TRUE
-)
-FetchContent_MakeAvailable(ixwebsocket)
+if(ENABLE_IBKR)
+    include(cmake/TwsApi.cmake)
+endif()
 
-# --- Core library: XTB client + storage + utils ---
+# --- Core library: storage + utils ---
 add_library(core_lib STATIC
     src/core_lib.cpp
     src/util/env.cpp
     src/util/log.cpp
     src/util/time.cpp
-    src/xtb/client.cpp
-    src/xtb/api.cpp
     src/storage/parquet_writer.cpp
-    src/backfill/engine.cpp
+    src/storage/data_lake_paths.cpp
 )
 
 target_include_directories(core_lib PUBLIC
@@ -76,24 +64,34 @@ file(GLOB_RECURSE CORE_HEADERS CONFIGURE_DEPENDS
 target_sources(core_lib PRIVATE ${CORE_HEADERS})
 
 target_link_libraries(core_lib PUBLIC
-    ixwebsocket            # FetchContent target (no namespace alias)
     nlohmann_json::nlohmann_json
     Arrow::arrow_shared
     Parquet::parquet_shared
     spdlog::spdlog
     fmt::fmt
-    OpenSSL::SSL
-    OpenSSL::Crypto
 )
 
 target_compile_options(core_lib PRIVATE
     -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wno-sign-conversion
 )
 
+if(ENABLE_IBKR)
+    add_library(ibkr_session STATIC src/ibkr/session.cpp)
+    target_include_directories(ibkr_session PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/header)
+    target_link_libraries(ibkr_session PUBLIC twsapi spdlog::spdlog)
+    target_compile_options(ibkr_session PRIVATE
+        -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wno-sign-conversion
+    )
+endif()
+
 # --- Production CLI app ---
 if(ENABLE_APP AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/app/main.cpp")
     add_executable(app app/main.cpp)
     target_link_libraries(app PRIVATE core_lib)
+    if(ENABLE_IBKR)
+        target_link_libraries(app PRIVATE ibkr_session)
+        target_compile_definitions(app PRIVATE ENABLE_IBKR=1)
+    endif()
 endif()
 
 # --- Dev / scratch main ---
@@ -101,6 +99,14 @@ if(ENABLE_DEV_MAIN AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/app/dev_main.cpp")
     add_executable(dev_main app/dev_main.cpp)
     target_link_libraries(dev_main PRIVATE core_lib)
     target_compile_definitions(dev_main PRIVATE DEV_MAIN_BUILD=1)
+    if(ENABLE_IBKR)
+        target_link_libraries(dev_main PRIVATE ibkr_session)
+        target_compile_definitions(dev_main PRIVATE ENABLE_IBKR=1)
+        # twsapi is built as a shared library in the build tree.
+        set_target_properties(dev_main PROPERTIES
+            BUILD_RPATH "${CMAKE_BINARY_DIR}/ibjts-client/lib"
+        )
+    endif()
 endif()
 
 # --- Unit tests ---
